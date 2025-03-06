@@ -1,0 +1,30 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "mcp-solana-ico"
+version = "0.0.1"
+description = "A simple MCP server for a Solana ICO"
+authors = ["waifuai@users.noreply.github.com"]
+license = "MIT-0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastmcp = "^0.1.0"
+pydantic = "^2.0"
+solders = "^0.17.0"
+httpx = "^0.26.0"
+spl-token = "^0.4.0"
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.2.0"
+pytest = "^7.0"
+pytest-asyncio = "^0.21.0"
+
+[tool.ruff]
+line-length = 120
+select = ["E", "W", "F", "I", "N", "UP", "Y001"]
+ignore = ["E501", "F401"]
+
+[tool.ruff.format]
+docstring-code-line-length = "source"
