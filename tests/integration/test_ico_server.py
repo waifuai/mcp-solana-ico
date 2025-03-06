@@ -7,7 +7,7 @@ from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
-import mcp_simple_ico.server as ico_server
+import mcp_solana_ico.server as ico_server
 from mcp.client.session import ClientSession
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import (

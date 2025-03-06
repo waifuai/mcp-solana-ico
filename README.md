@@ -29,7 +29,7 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 1.  Start the server:
 
     ```bash
-    poetry run python mcp_simple_ico/server.py
+    poetry run python mcp_solana_ico/server.py
     ```
 
 2.  Interact with the server using an MCP client (e.g., the Claude Desktop App).
@@ -44,7 +44,7 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 
 ## Key Files
 
-*   `mcp_simple_ico/server.py`: The main server code, including the `buy_tokens` tool and `get_ico_info` resource.
+*   `mcp_solana_ico/server.py`: The main server code, including the `buy_tokens` tool and `get_ico_info` resource.
 *   `tests/integration/test_ico_server.py`: Integration tests for the server.
 *   `pyproject.toml`: Poetry configuration file.
 
