@@ -2,7 +2,8 @@ import asyncio
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from pydantic import BaseModel, Field
@@ -94,13 +95,13 @@ def check_rate_limit(ip: str) -> bool:
                 return False  # Rate limit exceeded
             else:
                 rate_limit_cache[ip] = (count + 1, timestamp)
-                return True  # Rate limit not exceeded
+            return True  # Rate limit not exceeded
         else:  # Reset after a minute
             rate_limit_cache[ip] = (1, now)
-            return True
+        return True
     else:
         rate_limit_cache[ip] = (1, now)
-        return True
+    return True
 
 # --- Pydantic Models ---
 
@@ -124,13 +125,33 @@ class Token(BaseModel):
         )
 
 
+class CurveType(str, Enum):
+    fixed = "fixed"
+    linear = "linear"
+    exponential = "exponential"
+    sigmoid = "sigmoid"
+    custom = "custom"
+
+
 class ICO(BaseModel):
     token: Token
-    price_per_token: float = Field(
-        description="Price of one token in SOL (not lamports)"
+    curve_type: CurveType = Field(
+        CurveType.fixed, description="The type of bonding curve to use."
     )
-    tokens_available: int = Field(
-        description="Number of tokens available for sale (in base units)"
+    fixed_price: Optional[float] = Field(
+        None, description="The fixed price of the token (in SOL per token). Only used if curve_type is 'fixed'."
+    )
+    initial_price: Optional[float] = Field(
+        None, description="The initial price of the token (in SOL per token). Used for bonding curves."
+    )
+    slope: Optional[float] = Field(
+        None, description="The slope of the linear bonding curve. Only used if curve_type is 'linear'."
+    )
+    growth_rate: Optional[float] = Field(
+        None, description="The growth rate of the exponential bonding curve. Only used if curve_type is 'exponential'."
+    )
+    custom_formula: Optional[str] = Field(
+        None, description="The custom formula for the bonding curve. Only used if curve_type is 'custom'."
     )
     start_time: int = Field(description="Start time of the ICO (Unix timestamp)")
     end_time: int = Field(description="End time of the ICO (Unix timestamp)")
@@ -140,13 +161,28 @@ class ICO(BaseModel):
         """Loads ICO details from configuration."""
         # In a real application, load this from a config file, database, or environment variables
 
+        curve_type_str = os.getenv("CURVE_TYPE", "fixed")
+        try:
+            curve_type = CurveType(curve_type_str)
+        except ValueError:
+            curve_type = CurveType.fixed  # Default to fixed if invalid
+
         return cls(
             token=Token.from_config(),
-            price_per_token=TOKEN_PRICE_PER_LAMPORTS,
-            tokens_available=500_000_000
-            * (
-                10**9
-            ),  # 50% of total supply, accounting for decimals.
+            curve_type=curve_type,
+            fixed_price=float(os.getenv("FIXED_PRICE", str(TOKEN_PRICE_PER_LAMPORTS)))
+            if curve_type == CurveType.fixed
+            else None,
+            initial_price=float(os.getenv("INITIAL_PRICE", "0.0000001"))
+            if curve_type != CurveType.fixed
+            else None,
+            slope=float(os.getenv("SLOPE", "0.000000001"))
+            if curve_type == CurveType.linear
+            else None,
+            growth_rate=float(os.getenv("GROWTH_RATE", "0.0000000001"))
+            if curve_type == CurveType.exponential
+            else None,
+            custom_formula=os.getenv("CUSTOM_FORMULA") if curve_type == CurveType.custom else None,
             start_time=ICO_START_TIMESTAMP,
             end_time=ICO_END_TIMESTAMP,
         )
@@ -169,7 +205,7 @@ def sol_to_lamports(sol: float) -> int:
     """Convert SOL to lamports."""
     return int(sol * LAMPORTS_PER_SOL)
 
-async def _validate_payment_transaction(client: httpx.AsyncClient, tx_signature: Signature, amount: int) -> Pubkey:
+async def _validate_payment_transaction(client: httpx.AsyncClient, tx_signature: Signature, required_sol: float) -> Pubkey:
     """Validates the payment transaction and returns the payer's public key."""
     transaction_response = await client.post(
         RPC_ENDPOINT,
@@ -206,9 +242,7 @@ async def _validate_payment_transaction(client: httpx.AsyncClient, tx_signature:
     transfer_info = instructions[0]["parsed"]["info"]
     transfer_amount_lamports = transfer_info["lamports"]
     transfer_amount_sol = transfer_amount_lamports / LAMPORTS_PER_SOL
-    required_sol = (
-        amount / (10**ico_data.token.decimals) * ico_data.price_per_token
-    )
+    
     if transfer_amount_sol < required_sol:
         raise InsufficientFundsError(
             f"Insufficient payment. Required: {required_sol} SOL. Received: {transfer_amount_sol} SOL"
@@ -290,6 +324,35 @@ async def get_ico_info(context: Context) -> str:
 
 # --- MCP Tools ---
 
+total_tokens_minted = 0  # Initialize total tokens minted
+
+def calculate_token_price(amount: int, ico: ICO) -> float:
+    """Calculates the token price based on the bonding curve."""
+    global total_tokens_minted
+    if ico.curve_type == CurveType.fixed:
+        if ico.fixed_price is None:
+            raise ValueError("Fixed price is not set.")
+        return amount / (10**ico.token.decimals) * ico.fixed_price
+    elif ico.curve_type == CurveType.linear:
+        if ico.initial_price is None or ico.slope is None:
+            raise ValueError("Initial price or slope is not set for linear curve.")
+        return amount / (10**ico.token.decimals) * (ico.initial_price + ico.slope * total_tokens_minted)
+    elif ico.curve_type == CurveType.exponential:
+        if ico.initial_price is None or ico.growth_rate is None:
+            raise ValueError("Initial price or growth rate is not set for exponential curve.")
+        return amount / (10**ico.token.decimals) * (ico.initial_price * (1 + ico.growth_rate)**total_tokens_minted)
+    elif ico.curve_type == CurveType.custom:
+        if ico.custom_formula is None:
+            raise ValueError("Custom formula is not set.")
+        try:
+            # WARNING: Using eval() can be dangerous.  Sanitize inputs carefully!
+            price = eval(ico.custom_formula, {"initial_price": ico.initial_price, "total_tokens_minted": total_tokens_minted})
+            return amount / (10**ico.token.decimals) * price
+        except Exception as e:
+            raise ValueError(f"Error evaluating custom formula: {e}")
+    else:
+        raise ValueError(f"Invalid curve type: {ico.curve_type}")
+
 
 @mcp.tool()
 async def buy_tokens(
@@ -306,6 +369,43 @@ async def buy_tokens(
     ),
     client_ip: str = Field(..., description="The client's IP address."),
 ) -> str:
+    """Buys tokens from the ICO.
+
+    Args:
+        context: The MCP context.
+        amount: The number of tokens to purchase (in base units).
+        payment_transaction: The transaction signature of the SOL payment.
+        client_ip: The client's IP address.
+
+    Returns:
+        A string indicating the success or failure of the purchase.
+
+    Raises:
+        InactiveICOError: If the ICO is not active.
+        InsufficientFundsError: If the payment is insufficient.
+        InvalidTransactionError: If the transaction signature is invalid or the transaction is not a system program transfer.
+        TransactionFailedError: If the token transfer transaction fails.
+        RateLimitExceededError: If the client has exceeded the rate limit.
+        Exception: If any other error occurs.
+
+    Example:
+        Successful purchase:
+        ```
+        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        ```
+
+        Inactive ICO:
+        ```
+        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        # Raises InactiveICOError if ICO_START_TIMESTAMP > now or ICO_END_TIMESTAMP < now
+        ```
+
+        Insufficient Funds:
+        ```
+        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        # Raises InsufficientFundsError if payment_transaction doesn't transfer enough SOL
+        ```
+    """
     async with httpx.AsyncClient() as client:
         try:
             # Rate Limiting Check
@@ -319,20 +419,21 @@ async def buy_tokens(
             if amount <= 0:
                 raise InvalidTransactionError("Invalid amount. Must be greater than 0.")
 
-            if amount > ico_data.tokens_available:
-                raise InsufficientFundsError("Not enough tokens available for purchase.")
+            # Calculate required SOL based on the bonding curve
+            required_sol = calculate_token_price(amount, ico_data)
 
             try:
                 tx_signature = Signature.from_string(payment_transaction)
             except ValueError as e:
                 raise InvalidTransactionError(f"Invalid transaction signature: {e}")
 
-            payer = await _validate_payment_transaction(client, tx_signature, amount)
+            payer = await _validate_payment_transaction(client, tx_signature, required_sol)
             tx_hash = await _create_and_send_token_transfer(client, payer, amount)
 
-            ico_data.tokens_available -= amount
+            global total_tokens_minted
+            total_tokens_minted += amount
             logger.info(f"Successfully processed purchase of {amount} tokens. tx_hash: {tx_hash}, client_ip: {client_ip}")
-            return f"Successfully purchased {amount / (10 ** ico_data.token.decimals)} {ico_data.token.symbol}. Payment of {lamports_to_sol(sol_to_lamports(amount / (10**ico_data.token.decimals) * ico_data.price_per_token)):.6f} SOL received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
+            return f"Successfully purchased {amount / (10 ** ico_data.token.decimals)} {ico_data.token.symbol} at a price of {required_sol:.6f} SOL. Payment received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
 
         except InactiveICOError as e:
             logger.warning(f"Attempted to purchase tokens during inactive ICO: {e}, client_ip: {client_ip}")
