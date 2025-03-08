@@ -44,6 +44,7 @@ from mcp_solana_ico.errors import (
     RateLimitExceededError
 )
 from mcp_solana_ico.utils import get_token_account
+from mcp_solana_ico import dex
 
 from dotenv import load_dotenv
 
@@ -134,6 +135,7 @@ class CurveType(str, Enum):
 
 
 class ICO(BaseModel):
+    ico_id: str = Field(description="Unique identifier for the ICO")
     token: Token
     curve_type: CurveType = Field(
         CurveType.fixed, description="The type of bonding curve to use."
@@ -157,7 +159,7 @@ class ICO(BaseModel):
     end_time: int = Field(description="End time of the ICO (Unix timestamp)")
 
     @classmethod
-    def from_config(cls) -> "ICO":
+    def from_config(cls, ico_id: str) -> "ICO":
         """Loads ICO details from configuration."""
         # In a real application, load this from a config file, database, or environment variables
 
@@ -168,6 +170,7 @@ class ICO(BaseModel):
             curve_type = CurveType.fixed  # Default to fixed if invalid
 
         return cls(
+            ico_id=ico_id,
             token=Token.from_config(),
             curve_type=curve_type,
             fixed_price=float(os.getenv("FIXED_PRICE", str(TOKEN_PRICE_PER_LAMPORTS)))
@@ -190,7 +193,14 @@ class ICO(BaseModel):
 
 # --- Server Setup ---
 mcp = FastMCP(name="Solana ICO Server")
-ico_data = ICO.from_config()
+#ico_data = ICO.from_config() #Removed this line
+#ico_data: Dict[str, ICO] = {} #Added this line
+ico_data: Dict[str, ICO] = {}
+
+# Load ICO configurations from environment variables
+ico_ids = os.getenv("ICO_IDS", "main_ico").split(",")
+for ico_id in ico_ids:
+    ico_data[ico_id] = ICO.from_config(ico_id)
 
 
 # --- Helper Functions ---
@@ -251,7 +261,7 @@ async def _validate_payment_transaction(client: httpx.AsyncClient, tx_signature:
     payer = Pubkey.from_string(transfer_info["source"])
     return payer
 
-async def _create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubkey, amount: int) -> str:
+async def _create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubkey, amount: int, ico_id: str) -> str:
     """Creates and sends the token transfer instruction."""
     token_account = get_token_account(payer)
 
@@ -259,13 +269,13 @@ async def _create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubk
         TransferCheckedParams(
             program_id=TOKEN_PROGRAM_ID,
             source=get_associated_token_address(
-                ICO_WALLET.pubkey(), TOKEN_MINT_ADDRESS
+                ICO_WALLET.pubkey(), Pubkey.from_string(ico_data[ico_id].token.token_address)
             ),
-            mint=TOKEN_MINT_ADDRESS,
+            mint=Pubkey.from_string(ico_data[ico_id].token.token_address),
             dest=token_account,
             owner=ICO_WALLET.pubkey(),
             amount=amount,
-            decimals=ico_data.token.decimals,
+            decimals=ico_data[ico_id].token.decimals,
             signers=[],
         )
     )
@@ -317,18 +327,23 @@ async def _create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubk
 
 
 @mcp.resource("ico://info")
-async def get_ico_info(context: Context) -> str:
+async def get_ico_info(context: Context, ico_id: str = Field(..., description="The ICO ID.")) -> str:
     """Get information about the current ICO."""
-    return ico_data.model_dump_json(indent=2)
+    if ico_id not in ico_data:
+        return f"ICO with id {ico_id} not found."
+    return ico_data[ico_id].model_dump_json(indent=2)
 
 
 # --- MCP Tools ---
 
-total_tokens_minted = 0  # Initialize total tokens minted
+total_tokens_minted: Dict[str, int] = {}  # Initialize total tokens minted for each ICO
 
 def calculate_token_price(amount: int, ico: ICO) -> float:
     """Calculates the token price based on the bonding curve."""
-    global total_tokens_minted
+    ico_id = ico.ico_id
+    if ico_id not in total_tokens_minted:
+        total_tokens_minted[ico_id] = 0
+
     if ico.curve_type == CurveType.fixed:
         if ico.fixed_price is None:
             raise ValueError("Fixed price is not set.")
@@ -336,17 +351,17 @@ def calculate_token_price(amount: int, ico: ICO) -> float:
     elif ico.curve_type == CurveType.linear:
         if ico.initial_price is None or ico.slope is None:
             raise ValueError("Initial price or slope is not set for linear curve.")
-        return amount / (10**ico.token.decimals) * (ico.initial_price + ico.slope * total_tokens_minted)
+        return amount / (10**ico.token.decimals) * (ico.initial_price + ico.slope * total_tokens_minted[ico_id])
     elif ico.curve_type == CurveType.exponential:
         if ico.initial_price is None or ico.growth_rate is None:
             raise ValueError("Initial price or growth rate is not set for exponential curve.")
-        return amount / (10**ico.token.decimals) * (ico.initial_price * (1 + ico.growth_rate)**total_tokens_minted)
+        return amount / (10**ico.token.decimals) * (ico.initial_price * (1 + ico.growth_rate)**total_tokens_minted[ico_id])
     elif ico.curve_type == CurveType.custom:
         if ico.custom_formula is None:
             raise ValueError("Custom formula is not set.")
         try:
             # WARNING: Using eval() can be dangerous.  Sanitize inputs carefully!
-            price = eval(ico.custom_formula, {"initial_price": ico.initial_price, "total_tokens_minted": total_tokens_minted})
+            price = eval(ico.custom_formula, {"initial_price": ico.initial_price, "total_tokens_minted": total_tokens_minted[ico_id]})
             return amount / (10**ico.token.decimals) * price
         except Exception as e:
             raise ValueError(f"Error evaluating custom formula: {e}")
@@ -357,6 +372,7 @@ def calculate_token_price(amount: int, ico: ICO) -> float:
 @mcp.tool()
 async def buy_tokens(
     context: Context,
+    ico_id: str = Field(..., description="The ICO ID."),
     amount: int = Field(
         ..., description="The number of tokens to purchase (in base units)."
     ),
@@ -373,6 +389,7 @@ async def buy_tokens(
 
     Args:
         context: The MCP context.
+        ico_id: The ICO ID.
         amount: The number of tokens to purchase (in base units).
         payment_transaction: The transaction signature of the SOL payment.
         client_ip: The client's IP address.
@@ -391,18 +408,18 @@ async def buy_tokens(
     Example:
         Successful purchase:
         ```
-        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
         ```
 
         Inactive ICO:
         ```
-        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
         # Raises InactiveICOError if ICO_START_TIMESTAMP > now or ICO_END_TIMESTAMP < now
         ```
 
         Insufficient Funds:
         ```
-        buy_tokens(amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
+        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
         # Raises InsufficientFundsError if payment_transaction doesn't transfer enough SOL
         ```
     """
@@ -413,6 +430,10 @@ async def buy_tokens(
                 raise RateLimitExceededError(f"Rate limit exceeded for IP: {client_ip}")
 
             # 1.  Basic Validations
+            if ico_id not in ico_data:
+                return f"ICO with id {ico_id} not found."
+            ico = ico_data[ico_id]
+
             if not ICO_START_TIMESTAMP <= time.time() <= ICO_END_TIMESTAMP:
                 raise InactiveICOError("ICO is not active.")
 
@@ -420,7 +441,7 @@ async def buy_tokens(
                 raise InvalidTransactionError("Invalid amount. Must be greater than 0.")
 
             # Calculate required SOL based on the bonding curve
-            required_sol = calculate_token_price(amount, ico_data)
+            required_sol = calculate_token_price(amount, ico)
 
             try:
                 tx_signature = Signature.from_string(payment_transaction)
@@ -428,12 +449,13 @@ async def buy_tokens(
                 raise InvalidTransactionError(f"Invalid transaction signature: {e}")
 
             payer = await _validate_payment_transaction(client, tx_signature, required_sol)
-            tx_hash = await _create_and_send_token_transfer(client, payer, amount)
+            tx_hash = await _create_and_send_token_transfer(client, payer, amount, ico_id)
 
-            global total_tokens_minted
-            total_tokens_minted += amount
+            if ico_id not in total_tokens_minted:
+                total_tokens_minted[ico_id] = 0
+            total_tokens_minted[ico_id] += amount
             logger.info(f"Successfully processed purchase of {amount} tokens. tx_hash: {tx_hash}, client_ip: {client_ip}")
-            return f"Successfully purchased {amount / (10 ** ico_data.token.decimals)} {ico_data.token.symbol} at a price of {required_sol:.6f} SOL. Payment received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
+            return f"Successfully purchased {amount / (10 ** ico.token.decimals)} {ico.token.symbol} at a price of {required_sol:.6f} SOL. Payment received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
 
         except InactiveICOError as e:
             logger.warning(f"Attempted to purchase tokens during inactive ICO: {e}, client_ip: {client_ip}")
@@ -453,6 +475,71 @@ async def buy_tokens(
         except Exception as e:  # pylint: disable=broad-except-clause
             logger.exception(f"Error processing purchase: {e}, client_ip: {client_ip}")
             return f"An error occurred: {e}"
+
+@mcp.tool()
+async def create_order(
+    context: Context,
+    ico_id: str = Field(..., description="The ICO ID."),
+    amount: int = Field(..., description="The amount of tokens to sell."),
+    price: float = Field(..., description="The price per token."),
+    owner: str = Field(..., description="The public key of the order owner."),
+) -> str:
+    """Creates a new order in the DEX."""
+    try:
+        owner_pubkey = Pubkey.from_string(owner)
+        return await dex.create_order(context, ico_id, amount, price, owner_pubkey)
+    except Exception as e:
+        return f"Error creating order: {e}"
+
+@mcp.tool()
+async def cancel_order(
+    context: Context,
+    ico_id: str = Field(..., description="The ICO ID."),
+    order_id: int = Field(..., description="The ID of the order to cancel."),
+    owner: str = Field(..., description="The public key of the order owner."),
+) -> str:
+    """Cancels an existing order in the DEX."""
+    try:
+        owner_pubkey = Pubkey.from_string(owner)
+        return await dex.cancel_order(context, ico_id, order_id, owner_pubkey)
+    except Exception as e:
+        return f"Error cancelling order: {e}"
+
+@mcp.tool()
+async def execute_order(
+    context: Context,
+    ico_id: str = Field(..., description="The ICO ID."),
+    order_id: int = Field(..., description="The ID of the order to execute."),
+    buyer: str = Field(..., description="The public key of the buyer."),
+    amount: int = Field(..., description="The amount of tokens to buy."),
+) -> str:
+    """Executes an existing order in the DEX."""
+    try:
+        buyer_pubkey = Pubkey.from_string(buyer)
+        return await dex.execute_order(context, ico_id, order_id, buyer_pubkey, amount)
+    except Exception as e:
+        return f"Error executing order: {e}"
+
+@mcp.tool()
+async def get_discount(
+    context: Context,
+    ico_id: str = Field(..., description="The ICO ID."),
+    amount: int = Field(..., description="The amount of tokens to use for discount."),
+) -> str:
+    """Gets a discount based on the amount of tokens held."""
+    try:
+        if ico_id not in ico_data:
+            return f"ICO with id {ico_id} not found."
+        ico = ico_data[ico_id]
+
+        # Example: 1% discount for every 1000 tokens
+        discount = amount / 1000 * 0.01
+        if discount > 0.1:
+            discount = 0.1  # Cap at 10%
+
+        return f"Discount: {discount:.2f}"
+    except Exception as e:
+        return f"Error getting discount: {e}"
 
 
 async def get_token_balance(client: httpx.AsyncClient, account_pubkey: Pubkey) -> int:
