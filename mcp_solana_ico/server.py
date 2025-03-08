@@ -4,7 +4,7 @@ import os
 import time
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-
+import uuid
 import httpx
 from pydantic import BaseModel, Field
 from solders.hash import Hash as Blockhash
@@ -45,6 +45,9 @@ from mcp_solana_ico.errors import (
 )
 from mcp_solana_ico.utils import get_token_account
 from mcp_solana_ico import dex
+from mcp_solana_ico import affiliates
+from mcp_solana_ico import actions
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -333,6 +336,20 @@ async def get_ico_info(context: Context, ico_id: str = Field(..., description="T
         return f"ICO with id {ico_id} not found."
     return ico_data[ico_id].model_dump_json(indent=2)
 
+@mcp.resource("affiliate://register")
+async def register_affiliate(context: Context) -> str:
+    """Registers a user as an affiliate and returns a Solana Blink URL."""
+    affiliate_id = affiliates.generate_affiliate_id()
+    affiliates.store_affiliate_data(affiliate_id, {})  # Store basic affiliate data
+
+    # Generate Action API URL
+    action_api_url = f"/buy_tokens_action?affiliate_id={affiliate_id}"
+
+    # Generate Solana Blink URL
+    blink_url = "solana-action:" + quote(action_api_url)
+
+    return f"Affiliate registered successfully! Your Solana Blink URL is: {blink_url}"
+
 
 # --- MCP Tools ---
 
@@ -384,6 +401,7 @@ async def buy_tokens(
         ),
     ),
     client_ip: str = Field(..., description="The client's IP address."),
+    affiliate_id: Optional[str] = Field(None, description="The affiliate ID (optional).")
 ) -> str:
     """Buys tokens from the ICO.
 
@@ -393,35 +411,10 @@ async def buy_tokens(
         amount: The number of tokens to purchase (in base units).
         payment_transaction: The transaction signature of the SOL payment.
         client_ip: The client's IP address.
+        affiliate_id (optional): The affiliate ID.
 
     Returns:
         A string indicating the success or failure of the purchase.
-
-    Raises:
-        InactiveICOError: If the ICO is not active.
-        InsufficientFundsError: If the payment is insufficient.
-        InvalidTransactionError: If the transaction signature is invalid or the transaction is not a system program transfer.
-        TransactionFailedError: If the token transfer transaction fails.
-        RateLimitExceededError: If the client has exceeded the rate limit.
-        Exception: If any other error occurs.
-
-    Example:
-        Successful purchase:
-        ```
-        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
-        ```
-
-        Inactive ICO:
-        ```
-        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
-        # Raises InactiveICOError if ICO_START_TIMESTAMP > now or ICO_END_TIMESTAMP < now
-        ```
-
-        Insufficient Funds:
-        ```
-        buy_tokens(ico_id="main_ico", amount=1000000000, payment_transaction="...", client_ip="127.0.0.1")
-        # Raises InsufficientFundsError if payment_transaction doesn't transfer enough SOL
-        ```
     """
     async with httpx.AsyncClient() as client:
         try:
@@ -449,6 +442,19 @@ async def buy_tokens(
                 raise InvalidTransactionError(f"Invalid transaction signature: {e}")
 
             payer = await _validate_payment_transaction(client, tx_signature, required_sol)
+
+            # 2. Affiliate Handling
+            if affiliate_id:
+                affiliate_data = affiliates.get_affiliate_data(affiliate_id)
+                if not affiliate_data:
+                    logger.warning(f"Invalid affiliate ID: {affiliate_id}, client_ip: {client_ip}")
+                    return "Invalid affiliate ID."
+                
+                # Calculate commission (10%)
+                commission = required_sol * 0.1
+                # TODO: Store commission details (affiliate_id, ico_id, amount, commission, timestamp)
+                logger.info(f"Affiliate commission recorded: affiliate_id={affiliate_id}, ico_id={ico_id}, amount={amount}, commission={commission}, client_ip={client_ip}")
+
             tx_hash = await _create_and_send_token_transfer(client, payer, amount, ico_id)
 
             if ico_id not in total_tokens_minted:
