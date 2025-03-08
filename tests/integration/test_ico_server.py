@@ -13,6 +13,7 @@ from solders.pubkey import Pubkey
 from solders.signature import Signature
 from dotenv import load_dotenv
 from unittest.mock import patch
+from mcp_solana_ico.schemas import IcoConfigModel
 
 load_dotenv()
 
@@ -444,3 +445,109 @@ async def test_custom_curve(test_client):
         )
         assert response.status_code == 200
         # Add more sophisticated assertions here if needed
+
+@pytest.mark.asyncio
+async def test_successful_token_sell(test_client):
+    # Mock the _validate_payment_transaction function to simulate a valid transaction
+    with patch("mcp_solana_ico.server._validate_payment_transaction") as mock_validate:
+        mock_validate.return_value = ICO_WALLET.pubkey()  # Simulate a valid payer
+
+        # Set up a valid ICO
+        ico_id = "main_ico"
+        amount = 1000
+        payment_transaction = "valid_transaction_signature"  # Placeholder
+
+        # Calculate required SOL
+        ico = ico_data[ico_id]
+        required_sol = calculate_token_price(amount, ico, is_sell=True)
+
+        # Call buy_tokens with valid parameters and sell=True
+        response = await test_client.post(
+            "/buy_tokens",
+            params={
+                "ico_id": ico_id,
+                "amount": amount,
+                "payment_transaction": payment_transaction,
+                "client_ip": "127.0.0.1",  # Example IP address
+                "sell": True,
+            },
+        )
+        assert response.status_code == 200
+
+        # Assert that the response indicates success
+        assert f"Successfully sold {amount / (10 ** ico.token.decimals)} {ico.token.symbol} for {required_sol:.6f} SOL." in response.text
+
+@pytest.mark.asyncio
+async def test_successful_token_sell_with_fee(test_client):
+    # Mock the _validate_payment_transaction function to simulate a valid transaction
+    with patch("mcp_solana_ico.server._validate_payment_transaction") as mock_validate:
+        mock_validate.return_value = ICO_WALLET.pubkey()  # Simulate a valid payer
+
+        # Set up a valid ICO with a sell fee
+        ico_id = "main_ico"
+        amount = 1000
+        payment_transaction = "valid_transaction_signature"  # Placeholder
+
+        # Set sell_fee_percentage to 0.01 (1%)
+        ico_data[ico_id].sell_fee_percentage = 0.01
+
+        # Calculate required SOL
+        ico = ico_data[ico_id]
+        required_sol = calculate_token_price(amount, ico, is_sell=True)
+
+        # Call buy_tokens with valid parameters and sell=True
+        response = await test_client.post(
+            "/buy_tokens",
+            params={
+                "ico_id": ico_id,
+                "amount": amount,
+                "payment_transaction": payment_transaction,
+                "client_ip": "127.0.0.1",  # Example IP address
+                "sell": True,
+            },
+        )
+        assert response.status_code == 200
+
+        # Assert that the response indicates success
+        assert f"Successfully sold {amount / (10 ** ico.token.decimals)} {ico.token.symbol} for {required_sol:.6f} SOL." in response.text
+
+        # Reset sell_fee_percentage to 0.0 for other tests
+        ico_data[ico_id].sell_fee_percentage = 0.0
+
+@pytest.mark.asyncio
+async def test_create_ico(test_client):
+    # Define a valid ICO configuration
+    ico_config = {
+        "token": {
+            "name": "TestToken",
+            "symbol": "TTK",
+            "total_supply": 1000000,
+            "decimals": 9
+        },
+        "ico": {
+            "ico_id": "test_ico",
+            "start_time": 1678886400,
+            "end_time": 1703980800,
+            "curve_type": "fixed",
+            "fixed_price": 0.000001,
+            "sell_fee_percentage": 0.01
+        },
+        "resources": []
+    }
+
+    # Call ico://create with the ICO configuration
+    response = await test_client.post(
+        "/ico://create",
+        json={"config": str(ico_config)}
+    )
+    assert response.status_code == 200
+    assert "ICO 'test_ico' created successfully." in response.text
+
+    # Assert that the ICO was created successfully
+    assert "test_ico" in ico_data
+
+    # Assert that the ICO configuration was loaded correctly
+    ico = ico_data["test_ico"]
+    assert ico.ico_id == "test_ico"
+    assert ico.token.name == "TestToken"
+    assert ico.sell_fee_percentage == 0.01

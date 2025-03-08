@@ -34,6 +34,36 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 
 2.  Interact with the server using an MCP client (e.g., the Claude Desktop App).
 
+### Creating New ICOs
+
+The server supports creating new ICOs via the `ico://create` resource. To create a new ICO, send a POST request to `/ico://create` with a JSON payload containing the ICO configuration. The configuration should conform to the `IcoConfigModel` schema defined in `mcp_solana_ico/schemas.py`.
+
+Example configuration:
+
+```json
+{
+  "token": {
+    "name": "ExampleToken",
+    "symbol": "EXT",
+    "total_supply": 1000000,
+    "decimals": 9
+  },
+  "ico": {
+    "ico_id": "example_ico",
+    "start_time": 1741500000,
+    "end_time": 1773036000,
+    "curve_type": "fixed",
+    "fixed_price": 10000,
+    "sell_fee_percentage": 0.02
+  },
+  "resources": []
+}
+```
+
+### Sell Fee Functionality
+
+The server now supports a sell fee, which is a percentage of the sale amount that is deducted when a user sells tokens back to the ICO. The `sell_fee_percentage` field in the ICO configuration determines the percentage of the fee.
+
 ## Testing
 
 1.  Run the tests:
@@ -45,6 +75,7 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 ## Key Files
 
 *   `mcp_solana_ico/server.py`: The main server code, including the `buy_tokens` tool and `get_ico_info` resource.
+*   `mcp_solana_ico/schemas.py`: Defines the `IcoConfigModel` schema for ICO configurations.
 *   `tests/integration/test_ico_server.py`: Integration tests for the server.
 *   `pyproject.toml`: Poetry configuration file.
 

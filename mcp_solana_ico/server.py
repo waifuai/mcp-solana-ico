@@ -48,6 +48,7 @@ from mcp_solana_ico import dex
 from mcp_solana_ico import affiliates
 from mcp_solana_ico import actions
 from urllib.parse import quote
+from mcp_solana_ico.schemas import IcoConfigModel, TokenConfig, IcoConfig
 
 from dotenv import load_dotenv
 
@@ -160,6 +161,7 @@ class ICO(BaseModel):
     )
     start_time: int = Field(description="Start time of the ICO (Unix timestamp)")
     end_time: int = Field(description="End time of the ICO (Unix timestamp)")
+    sell_fee_percentage: float = Field(0.0, description="The percentage of the sell fee.")
 
     @classmethod
     def from_config(cls, ico_id: str) -> "ICO":
@@ -191,6 +193,7 @@ class ICO(BaseModel):
             custom_formula=os.getenv("CUSTOM_FORMULA") if curve_type == CurveType.custom else None,
             start_time=ICO_START_TIMESTAMP,
             end_time=ICO_END_TIMESTAMP,
+            sell_fee_percentage=float(os.getenv("SELL_FEE_PERCENTAGE", "0.0")),
         )
 
 
@@ -350,40 +353,89 @@ async def register_affiliate(context: Context) -> str:
 
     return f"Affiliate registered successfully! Your Solana Blink URL is: {blink_url}"
 
+@mcp.resource("ico://create")
+async def create_ico(context: Context, config: str = Field(..., description="The ICO configuration as a JSON string.")) -> str:
+    """Creates a new ICO."""
+    try:
+        config_data = json.loads(config)
+        ico_config = IcoConfigModel.model_validate(config_data)
+
+        # Create Token and ICO instances
+        token = Token(
+            name=ico_config.token.name,
+            symbol=ico_config.token.symbol,
+            decimals=ico_config.token.decimals,
+            total_supply=ico_config.token.total_supply,
+            token_address=str(TOKEN_MINT_ADDRESS),  # Assuming the token address is the same for all ICOs for now
+        )
+
+        ico = ICO(
+            ico_id=ico_config.ico.ico_id,
+            token=token,
+            curve_type=CurveType(ico_config.ico.curve_type),
+            fixed_price=ico_config.ico.fixed_price,
+            initial_price=ico_config.ico.initial_price,
+            slope=ico_config.ico.slope,
+            growth_rate=ico_config.ico.growth_rate,
+            custom_formula=ico_config.ico.custom_formula,
+            start_time=ico_config.ico.start_time,
+            end_time=ico_config.ico.end_time,
+            sell_fee_percentage=ico_config.ico.sell_fee_percentage,
+        )
+
+        # Add the ICO to the ico_data dictionary
+        ico_data[ico.ico_id] = ico
+
+        # Save the configuration to a file (optional)
+        os.makedirs("ico_configs", exist_ok=True)
+        with open(f"ico_configs/{ico.ico_id}.json", "w") as f:
+            json.dump(config_data, f, indent=4)
+
+        return f"ICO '{ico.ico_id}' created successfully."
+    except Exception as e:
+        return f"Error creating ICO: {e}"
+
 
 # --- MCP Tools ---
 
 total_tokens_minted: Dict[str, int] = {}  # Initialize total tokens minted for each ICO
 
-def calculate_token_price(amount: int, ico: ICO) -> float:
+def calculate_token_price(amount: int, ico: ICO, is_sell: bool = False) -> float:
     """Calculates the token price based on the bonding curve."""
     ico_id = ico.ico_id
     if ico_id not in total_tokens_minted:
         total_tokens_minted[ico_id] = 0
 
+    base_price = 0.0
     if ico.curve_type == CurveType.fixed:
         if ico.fixed_price is None:
             raise ValueError("Fixed price is not set.")
-        return amount / (10**ico.token.decimals) * ico.fixed_price
+        base_price = amount / (10**ico.token.decimals) * ico.fixed_price
     elif ico.curve_type == CurveType.linear:
         if ico.initial_price is None or ico.slope is None:
             raise ValueError("Initial price or slope is not set for linear curve.")
-        return amount / (10**ico.token.decimals) * (ico.initial_price + ico.slope * total_tokens_minted[ico_id])
+        base_price = amount / (10**ico.token.decimals) * (ico.initial_price + ico.slope * total_tokens_minted[ico_id])
     elif ico.curve_type == CurveType.exponential:
         if ico.initial_price is None or ico.growth_rate is None:
             raise ValueError("Initial price or growth rate is not set for exponential curve.")
-        return amount / (10**ico.token.decimals) * (ico.initial_price * (1 + ico.growth_rate)**total_tokens_minted[ico_id])
+        base_price = amount / (10**ico.token.decimals) * (ico.initial_price * (1 + ico.growth_rate)**total_tokens_minted[ico_id])
     elif ico.curve_type == CurveType.custom:
         if ico.custom_formula is None:
             raise ValueError("Custom formula is not set.")
         try:
             # WARNING: Using eval() can be dangerous.  Sanitize inputs carefully!
             price = eval(ico.custom_formula, {"initial_price": ico.initial_price, "total_tokens_minted": total_tokens_minted[ico_id]})
-            return amount / (10**ico.token.decimals) * price
+            base_price = amount / (10**ico.token.decimals) * price
         except Exception as e:
             raise ValueError(f"Error evaluating custom formula: {e}")
     else:
         raise ValueError(f"Invalid curve type: {ico.curve_type}")
+
+    if is_sell:
+        fee = base_price * ico.sell_fee_percentage
+        return base_price - fee
+    else:
+        return base_price
 
 
 @mcp.tool()
@@ -401,9 +453,10 @@ async def buy_tokens(
         ),
     ),
     client_ip: str = Field(..., description="The client's IP address."),
-    affiliate_id: Optional[str] = Field(None, description="The affiliate ID (optional).")
+    affiliate_id: Optional[str] = Field(None, description="The affiliate ID (optional)."),
+    sell: bool = Field(False, description="Whether to sell tokens instead of buying.")
 ) -> str:
-    """Buys tokens from the ICO.
+    """Buys or sells tokens from the ICO.
 
     Args:
         context: The MCP context.
@@ -412,9 +465,10 @@ async def buy_tokens(
         payment_transaction: The transaction signature of the SOL payment.
         client_ip: The client's IP address.
         affiliate_id (optional): The affiliate ID.
+        sell (optional): Whether to sell tokens instead of buying.
 
     Returns:
-        A string indicating the success or failure of the purchase.
+        A string indicating the success or failure of the purchase or sale.
     """
     async with httpx.AsyncClient() as client:
         try:
@@ -434,7 +488,7 @@ async def buy_tokens(
                 raise InvalidTransactionError("Invalid amount. Must be greater than 0.")
 
             # Calculate required SOL based on the bonding curve
-            required_sol = calculate_token_price(amount, ico)
+            required_sol = calculate_token_price(amount, ico, is_sell=sell)
 
             try:
                 tx_signature = Signature.from_string(payment_transaction)
@@ -461,7 +515,10 @@ async def buy_tokens(
                 total_tokens_minted[ico_id] = 0
             total_tokens_minted[ico_id] += amount
             logger.info(f"Successfully processed purchase of {amount} tokens. tx_hash: {tx_hash}, client_ip: {client_ip}")
-            return f"Successfully purchased {amount / (10 ** ico.token.decimals)} {ico.token.symbol} at a price of {required_sol:.6f} SOL. Payment received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
+            if sell:
+                return f"Successfully sold {amount / (10 ** ico.token.decimals)} {ico.token.symbol} for {required_sol:.6f} SOL. Payment sent (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
+            else:
+                return f"Successfully purchased {amount / (10 ** ico.token.decimals)} {ico.token.symbol} at a price of {required_sol:.6f} SOL. Payment received (txid: {payment_transaction}). Token transfer txid: {tx_hash}"
 
         except InactiveICOError as e:
             logger.warning(f"Attempted to purchase tokens during inactive ICO: {e}, client_ip: {client_ip}")
