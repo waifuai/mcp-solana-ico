@@ -224,8 +224,6 @@ tests/
     └── test_ico_server.py  # Integration tests
 .env                    # Environment variables
 .gitignore
-ico_configs/            # Directory for ICO configuration files
-plans/                  # Development plans (for reference)
 pyproject.toml          # Poetry configuration
 pytest.ini              # Pytest configuration
 README.md               # This file
