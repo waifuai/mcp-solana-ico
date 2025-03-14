@@ -5,10 +5,10 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 *   **Multiple ICOs:** The server can manage multiple ICOs simultaneously, each with its own configuration.
 *   **Bonding Curves:**  Support for various bonding curve types (fixed, linear, exponential, sigmoid, and custom) to determine token pricing.
 *   **Sell Fee:**  A configurable sell fee is applied when users sell their tokens back to the ICO.
-*   **Affiliate Program:**  A basic affiliate program using Solana Blinks and Actions, allowing users to earn commissions on token purchases.
 *   **Decentralized Exchange (DEX):** A rudimentary in-memory DEX is included, allowing users to create, cancel, and execute orders for tokens.
 *   **Token Utility:** Includes a basic `get_discount` tool as an example of token utility.
 *   **ICO Creation:**  A new `ico://create` resource enables dynamic creation of new ICOs through a JSON configuration.
+* **Affiliate Program:** The affiliate program is now completely separate and resides in its own MCP server, `mcp_solana_affiliate`. This server has no dependencies on the affiliate program.
 
 **Disclaimer:** This is a simplified example and is **not** intended for production use.  A real-world ICO would require significantly more complexity, rigorous security measures, thorough error handling, and professional auditing.  This project is for educational purposes and to demonstrate the basic structure of an MCP server interacting with Solana.
 
@@ -151,7 +151,6 @@ ICO configurations are stored as JSON files in the `ico_configs/` directory.  Th
 *   **`ico://info?ico_id=<ico_id>`:**  Gets information about a specific ICO.  Replace `<ico_id>` with the ID of the ICO.  Returns a JSON representation of the ICO configuration.
 
 *   **`ico://create`:** Creates a new ICO dynamically.  Requires a JSON payload conforming to the `ICOConfig` schema (see `mcp_solana_ico/schemas.py`). The configuration will be validated, a new `ICO` instance created and added to `ico_data`, and the config saved to `ico_configs/`.
-*  **`affiliate://register`:** Registers an affiliate and returns a Solana Blink URL which will be used to buy tokens through the `buy_tokens_action`.
 
 ### Tools
 
@@ -161,7 +160,6 @@ ICO configurations are stored as JSON files in the `ico_configs/` directory.  Th
     *   `payment_transaction`: (String) The transaction signature of the SOL payment (for buying) or the token transfer (for selling). *Must be a pre-signed transaction*.
     *   `client_ip`: (String) The client's IP address (for rate limiting).
     *   `sell`: (Boolean, optional)  `False` for buying (default), `True` for selling.
-    *   `affiliate_id`: (String, optional) The affiliate ID, if applicable.
 *   **`create_order`:** (DEX) Creates a new order in the DEX.
     *  `ico_id`: (String) The ID of the ICO.
     *  `amount`: (Integer) The number of tokens to sell.
@@ -179,49 +177,26 @@ ICO configurations are stored as JSON files in the `ico_configs/` directory.  Th
 *   **`get_discount`:** Gets a discount based on the number of tokens held (example utility).
     *  `ico_id`: (String) The ID of the ICO.
     *  `amount`: (Integer) The amount of tokens to use for the discount calculation.
-*  **`get_affiliate_balance`:** Get the affiliate balance (place holder).
 
 ## Action API
 
-The Action API allows the server to be integrated with Solana Blinks.
+The Action API allows the server to be integrated with Solana Blinks.  **Note:** The affiliate program is handled by a separate server (`mcp_solana_affiliate`), so the Action API here *does not* include any affiliate-related functionality.
 
 * **`GET /buy_tokens_action`**: Returns metadata about the buy tokens action, such as the title, description, icon, and input fields.
 
 * **`POST /buy_tokens_action`**: This endpoint receives input data (amount) from the Blink client, constructs the appropriate Solana transaction (a token transfer from the ICO wallet to the user's token account), serializes it, and returns the serialized transaction. The Blink client then prompts the user to sign and submit this transaction.
-
-## Testing
-
-Run the integration tests:
-
-```bash
-poetry run pytest -m integration
-```
-
-The tests cover:
-
-*   Successful token purchases (buying).
-*   Successful token sales (with and without fees).
-*   Affiliate program functionality.
-*   Different bonding curve types.
-*   Error conditions (inactive ICO, insufficient funds, invalid transactions, rate limiting, etc.).
-*   ICO creation (`ico://create`).
-*  Action API endpoints.
 
 ## Project Structure
 
 ```
 mcp_solana_ico/
 ├── actions.py          # Action API endpoints
-├── affiliates.py      # Affiliate program logic
 ├── dex.py              # Decentralized exchange logic
 ├── errors.py           # Custom exception classes
 ├── server.py           # Main server code
 ├── schemas.py         # Pydantic models for data validation
 ├── utils.py           # Utility functions
 ├── __init__.py
-tests/
-└── integration/
-    └── test_ico_server.py  # Integration tests
 .env                    # Environment variables
 .gitignore
 pyproject.toml          # Poetry configuration
@@ -230,28 +205,16 @@ README.md               # This file
 ```
 
 ## Key Improvements and Explanations
-
-*   **Multiple ICOs:** The server now manages multiple ICOs, loaded from JSON files in the `ico_configs/` directory.
-*   **`ico://create` Resource:**  Dynamically create new ICOs using a JSON payload.
-*   **Bonding Curves:** Implemented various bonding curve types for dynamic token pricing.
-*   **Sell Fee:** Added a configurable sell fee for selling tokens back to the ICO.
-*   **DEX:** A basic in-memory decentralized exchange allows users to trade tokens.
-*   **Affiliate Program:** A rudimentary affiliate program leveraging Solana Blinks.
-*   **Schemas:** Added `schemas.py` for Pydantic models to validate ICO configurations.
-*   **Comprehensive Testing:** Integration tests in `tests/integration/test_ico_server.py` cover core functionality and error handling.
-*   **Action API:**  Integration with Solana Blinks via the Action API.
-*   **Rate Limiting:**  Basic rate limiting is implemented to prevent abuse.
-*   **Clearer Separation of Concerns:**  Logic is organized into separate files (`actions.py`, `affiliates.py`, `dex.py`, `errors.py`, `utils.py`).
+* **Completely Separated Affiliate Program:** The affiliate program is now fully contained within its own separate MCP server (`mcp_solana_affiliate`).
+* **No Affiliate Logic in Main Server:** The `mcp_solana_ico` server has *no* code or configuration related to the affiliate program.
+* **Action API Focus:** The Action API (`actions.py`) is solely responsible for constructing and returning Solana transactions for token purchases.
 
 ## Future Considerations
 
-*   **Persistent Storage:** Replace in-memory storage (for ICO data, affiliate data, DEX orders, etc.) with a persistent database (e.g., PostgreSQL, MongoDB).
+*   **Persistent Storage:** Replace in-memory storage (for ICO data, DEX orders, etc.) with a persistent database (e.g., PostgreSQL, MongoDB).
 *   **Robust DEX:** Implement a more sophisticated DEX, possibly using an AMM model or integrating with a Serum order book.
 *   **Advanced Token Utility:** Develop more complex token utility features.
 *   **User Accounts:** Implement a user account system.
 *   **UI:**  Create a user interface for easier interaction with the server.
 *   **Security Audit:**  Get a professional security audit before deploying to a production environment.
 *   **Production-Ready Key Management:**  Implement a secure key management solution.
-
-This improved README provides a comprehensive overview of the project, its features, how to use it, and important considerations for development and deployment.
-

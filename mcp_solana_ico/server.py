@@ -45,7 +45,6 @@ from mcp_solana_ico.errors import (
 )
 from mcp_solana_ico.utils import get_token_account
 from mcp_solana_ico import dex
-from mcp_solana_ico import affiliates
 from mcp_solana_ico import actions
 from urllib.parse import quote
 from mcp_solana_ico.schemas import IcoConfigModel, TokenConfig, IcoConfig
@@ -339,20 +338,6 @@ async def get_ico_info(context: Context, ico_id: str = Field(..., description="T
         return f"ICO with id {ico_id} not found."
     return ico_data[ico_id].model_dump_json(indent=2)
 
-@mcp.resource("affiliate://register")
-async def register_affiliate(context: Context) -> str:
-    """Registers a user as an affiliate and returns a Solana Blink URL."""
-    affiliate_id = affiliates.generate_affiliate_id()
-    affiliates.store_affiliate_data(affiliate_id, {})  # Store basic affiliate data
-
-    # Generate Action API URL
-    action_api_url = f"/buy_tokens_action?affiliate_id={affiliate_id}"
-
-    # Generate Solana Blink URL
-    blink_url = "solana-action:" + quote(action_api_url)
-
-    return f"Affiliate registered successfully! Your Solana Blink URL is: {blink_url}"
-
 @mcp.resource("ico://create")
 async def create_ico(context: Context, config: str = Field(..., description="The ICO configuration as a JSON string.")) -> str:
     """Creates a new ICO."""
@@ -496,18 +481,6 @@ async def buy_tokens(
                 raise InvalidTransactionError(f"Invalid transaction signature: {e}")
 
             payer = await _validate_payment_transaction(client, tx_signature, required_sol)
-
-            # 2. Affiliate Handling
-            if affiliate_id:
-                affiliate_data = affiliates.get_affiliate_data(affiliate_id)
-                if not affiliate_data:
-                    logger.warning(f"Invalid affiliate ID: {affiliate_id}, client_ip: {client_ip}")
-                    return "Invalid affiliate ID."
-                
-                # Calculate commission (10%)
-                commission = required_sol * 0.1
-                # TODO: Store commission details (affiliate_id, ico_id, amount, commission, timestamp)
-                logger.info(f"Affiliate commission recorded: affiliate_id={affiliate_id}, ico_id={ico_id}, amount={amount}, commission={commission}, client_ip={client_ip}")
 
             tx_hash = await _create_and_send_token_transfer(client, payer, amount, ico_id)
 

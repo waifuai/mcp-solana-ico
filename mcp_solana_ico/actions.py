@@ -12,6 +12,7 @@ from spl.token.constants import ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, W
 from spl.token.instructions import get_associated_token_address
 import httpx
 from solders import signature
+import os
 
 app = Flask(__name__)
 
@@ -51,7 +52,6 @@ async def post_buy_tokens_action():
     try:
         user_input = request.get_json()
         amount = user_input.get("amount")
-        affiliate_id = user_input.get("affiliate_id")
 
         # Get ICO data (assuming ico_id is 'main_ico' for now)
         ico_id = 'main_ico'
