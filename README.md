@@ -5,7 +5,6 @@ This project provides a simplified example of an MCP (Model Context Protocol) se
 *   **Multiple ICOs:** The server can manage multiple ICOs simultaneously, each with its own configuration.
 *   **Bonding Curves:**  Support for various bonding curve types (fixed, linear, exponential, sigmoid, and custom) to determine token pricing.
 *   **Sell Fee:**  A configurable sell fee is applied when users sell their tokens back to the ICO.
-*   **Decentralized Exchange (DEX):** A rudimentary in-memory DEX is included, allowing users to create, cancel, and execute orders for tokens.
 *   **Token Utility:** Includes a basic `get_discount` tool as an example of token utility.
 *   **ICO Creation:**  A new `ico://create` resource enables dynamic creation of new ICOs through a JSON configuration.
 * **Affiliate Program:** The affiliate program is now completely separate and resides in its own MCP server, `mcp_solana_affiliate`. This server has no dependencies on the affiliate program.
@@ -160,20 +159,6 @@ ICO configurations are stored as JSON files in the `ico_configs/` directory.  Th
     *   `payment_transaction`: (String) The transaction signature of the SOL payment (for buying) or the token transfer (for selling). *Must be a pre-signed transaction*.
     *   `client_ip`: (String) The client's IP address (for rate limiting).
     *   `sell`: (Boolean, optional)  `False` for buying (default), `True` for selling.
-*   **`create_order`:** (DEX) Creates a new order in the DEX.
-    *  `ico_id`: (String) The ID of the ICO.
-    *  `amount`: (Integer) The number of tokens to sell.
-    *  `price`: (Float) The price per token.
-    *  `owner`: (String) The public key of the order owner.
-*   **`cancel_order`:** (DEX) Cancels an existing order in the DEX.
-    *   `ico_id`: (String) The ID of the ICO.
-    *   `order_id`: (Integer) The ID of the order to cancel.
-    *   `owner`: (String) The public key of the order owner.
-*   **`execute_order`:** (DEX) Executes an existing order in the DEX.
-    *   `ico_id`: (String) The ID of the ICO.
-    *   `order_id`: (Integer) The ID of the order to execute.
-    *   `buyer`: (String) The public key of the buyer.
-    *   `amount`: (Integer) The amount of tokens to buy.
 *   **`get_discount`:** Gets a discount based on the number of tokens held (example utility).
     *  `ico_id`: (String) The ID of the ICO.
     *  `amount`: (Integer) The amount of tokens to use for the discount calculation.
@@ -189,19 +174,22 @@ The Action API allows the server to be integrated with Solana Blinks.  **Note:**
 ## Project Structure
 
 ```
-mcp_solana_ico/
-├── actions.py          # Action API endpoints
-├── dex.py              # Decentralized exchange logic
-├── errors.py           # Custom exception classes
-├── server.py           # Main server code
-├── schemas.py         # Pydantic models for data validation
-├── utils.py           # Utility functions
-├── __init__.py
-.env                    # Environment variables
-.gitignore
-pyproject.toml          # Poetry configuration
-pytest.ini              # Pytest configuration
-README.md               # This file
+mcp-solana-ico/           # Main project directory
+├── mcp_solana_ico/       # Core ICO server package
+│   ├── actions.py        # Action API endpoints
+│   ├── errors.py         # Custom exception classes
+│   ├── server.py         # Main ICO server code
+│   ├── schemas.py        # Pydantic models for data validation
+│   ├── utils.py          # Utility functions
+│   └── __init__.py
+├── plans/                # Planning documents
+├── tests/                # Tests
+├── .env                  # Environment variables for ICO server
+├── .gitignore
+├── LICENSE
+├── pyproject.toml        # Poetry configuration for main project
+├── pytest.ini            # Pytest configuration
+└── README.md             # This file
 ```
 
 ## Key Improvements and Explanations
@@ -211,8 +199,6 @@ README.md               # This file
 
 ## Future Considerations
 
-*   **Persistent Storage:** Replace in-memory storage (for ICO data, DEX orders, etc.) with a persistent database (e.g., PostgreSQL, MongoDB).
-*   **Robust DEX:** Implement a more sophisticated DEX, possibly using an AMM model or integrating with a Serum order book.
 *   **Advanced Token Utility:** Develop more complex token utility features.
 *   **User Accounts:** Implement a user account system.
 *   **UI:**  Create a user interface for easier interaction with the server.

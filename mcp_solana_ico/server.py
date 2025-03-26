@@ -44,7 +44,6 @@ from mcp_solana_ico.errors import (
     RateLimitExceededError
 )
 from mcp_solana_ico.utils import get_token_account
-from mcp_solana_ico import dex
 from mcp_solana_ico import actions
 from urllib.parse import quote
 from mcp_solana_ico.schemas import IcoConfigModel, TokenConfig, IcoConfig
@@ -511,50 +510,6 @@ async def buy_tokens(
         except Exception as e:  # pylint: disable=broad-except-clause
             logger.exception(f"Error processing purchase: {e}, client_ip: {client_ip}")
             return f"An error occurred: {e}"
-
-@mcp.tool()
-async def create_order(
-    context: Context,
-    ico_id: str = Field(..., description="The ICO ID."),
-    amount: int = Field(..., description="The amount of tokens to sell."),
-    price: float = Field(..., description="The price per token."),
-    owner: str = Field(..., description="The public key of the order owner."),
-) -> str:
-    """Creates a new order in the DEX."""
-    try:
-        owner_pubkey = Pubkey.from_string(owner)
-        return await dex.create_order(context, ico_id, amount, price, owner_pubkey)
-    except Exception as e:
-        return f"Error creating order: {e}"
-
-@mcp.tool()
-async def cancel_order(
-    context: Context,
-    ico_id: str = Field(..., description="The ICO ID."),
-    order_id: int = Field(..., description="The ID of the order to cancel."),
-    owner: str = Field(..., description="The public key of the order owner."),
-) -> str:
-    """Cancels an existing order in the DEX."""
-    try:
-        owner_pubkey = Pubkey.from_string(owner)
-        return await dex.cancel_order(context, ico_id, order_id, owner_pubkey)
-    except Exception as e:
-        return f"Error cancelling order: {e}"
-
-@mcp.tool()
-async def execute_order(
-    context: Context,
-    ico_id: str = Field(..., description="The ICO ID."),
-    order_id: int = Field(..., description="The ID of the order to execute."),
-    buyer: str = Field(..., description="The public key of the buyer."),
-    amount: int = Field(..., description="The amount of tokens to buy."),
-) -> str:
-    """Executes an existing order in the DEX."""
-    try:
-        buyer_pubkey = Pubkey.from_string(buyer)
-        return await dex.execute_order(context, ico_id, order_id, buyer_pubkey, amount)
-    except Exception as e:
-        return f"Error executing order: {e}"
 
 @mcp.tool()
 async def get_discount(
