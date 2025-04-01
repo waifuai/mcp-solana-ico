@@ -1,0 +1,18 @@
+{
+  "token": {
+    "name": "Secondary Token",
+    "symbol": "SCT",
+    "total_supply": 500000,
+    "decimals": 6,
+    "token_address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  },
+  "ico": {
+    "ico_id": "secondary_ico",
+    "start_time": 1706745600,
+    "end_time": 1738368000,
+    "curve_type": "fixed",
+    "fixed_price": 5e-06,
+    "sell_fee_percentage": 0.03
+  },
+  "resources": []
+}

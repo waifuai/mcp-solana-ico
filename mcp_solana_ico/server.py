@@ -49,7 +49,7 @@ def sol_to_lamports(sol: float) -> int:
 
 # --- MCP Resources ---
 
-@mcp.resource("ico://info")
+@mcp.tool() # Changed from resource to tool
 async def get_ico_info(context: Context, ico_id: str = Field(..., description="The ICO ID.")) -> str:
     """Get information about a specific ICO."""
     ico = ico_manager.get_ico(ico_id)
@@ -58,7 +58,7 @@ async def get_ico_info(context: Context, ico_id: str = Field(..., description="T
     # Return JSON representation using Pydantic's model_dump_json
     return ico.model_dump_json(indent=2)
 
-@mcp.resource("ico://create")
+@mcp.tool() # Changed from resource to tool
 async def create_ico(context: Context, config_json: str = Field(..., description="The ICO configuration as a JSON string.")) -> str:
     """Creates a new ICO from a JSON configuration string."""
     try:

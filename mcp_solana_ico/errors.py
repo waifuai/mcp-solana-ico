@@ -15,4 +15,10 @@ class TransactionFailedError(Exception):
 
 
 class TokenBalanceError(Exception):
-    """Raised if there's an issue fetching the token balance."""
+
+    pass
+
+
+class RateLimitExceededError(Exception):
+    """Raised when the rate limit is exceeded."""
+    pass

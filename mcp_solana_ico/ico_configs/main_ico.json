@@ -1,0 +1,19 @@
+{
+  "token": {
+    "name": "My Main Token",
+    "symbol": "MMT",
+    "total_supply": 1000000000,
+    "decimals": 9,
+    "token_address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  },
+  "ico": {
+    "ico_id": "main_ico",
+    "start_time": 1704067200,
+    "end_time": 1735689600,
+    "curve_type": "linear",
+    "initial_price": 1e-06,
+    "slope": 1e-08,
+    "sell_fee_percentage": 0.01
+  },
+  "resources": []
+}

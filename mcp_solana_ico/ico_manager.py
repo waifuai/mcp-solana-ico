@@ -11,25 +11,30 @@ from mcp.server.fastmcp.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Determine the absolute path to the directory containing this file
+MODULE_DIR = Path(__file__).parent.resolve()
+
 # In-memory storage for loaded ICO configurations and state
 ico_data: Dict[str, IcoConfigModel] = {}
 total_tokens_minted: Dict[str, int] = {} # Tracks minted tokens per ICO for bonding curves
 
-def load_icos_from_config_files(config_dir: str = ICO_CONFIG_DIR) -> Dict[str, IcoConfigModel]:
+def load_icos_from_config_files(config_dir_name: str = ICO_CONFIG_DIR) -> Dict[str, IcoConfigModel]:
     """
-    Loads ICO configurations from JSON files in the specified directory.
+    Loads ICO configurations from JSON files in the specified directory
+    relative to this module's location.
 
     Args:
-        config_dir: The directory containing ICO configuration files.
+        config_dir_name: The name of the directory containing ICO configuration files.
 
     Returns:
         A dictionary mapping ico_id to the validated IcoConfigModel instance.
     """
     loaded_icos: Dict[str, IcoConfigModel] = {}
-    config_path = Path(config_dir)
+    # Construct absolute path to the config directory
+    config_path = MODULE_DIR / config_dir_name
 
     if not config_path.is_dir():
-        logger.warning(f"ICO configuration directory not found: {config_dir}. No ICOs loaded.")
+        logger.warning(f"ICO configuration directory not found: {config_path}. No ICOs loaded.")
         return loaded_icos
 
     logger.info(f"Loading ICO configurations from: {config_path.resolve()}")
@@ -90,7 +95,8 @@ def add_or_update_ico(ico_config: IcoConfigModel) -> bool:
         total_tokens_minted[ico_id] = 0 # Initialize if new
 
     # Save the configuration to a file
-    config_path = Path(ICO_CONFIG_DIR)
+    # Use MODULE_DIR to ensure the path is relative to the module
+    config_path = MODULE_DIR / ICO_CONFIG_DIR
     config_path.mkdir(parents=True, exist_ok=True) # Ensure directory exists
     file_path = config_path / f"{ico_id}.json"
     try:
