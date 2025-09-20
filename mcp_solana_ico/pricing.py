@@ -1,3 +1,43 @@
+"""
+Token Pricing Engine with Bonding Curves
+
+This module implements a comprehensive token pricing system using various bonding curve mechanisms
+for Initial Coin Offerings (ICOs). It calculates token prices dynamically based on supply and demand
+dynamics, supporting multiple curve types for different economic models.
+
+Bonding Curve Types Supported:
+- Fixed Price: Constant price regardless of supply
+- Linear: Price increases linearly with supply
+- Exponential: Price grows exponentially with supply
+- Sigmoid: S-shaped curve with slow growth, rapid growth, then plateau
+- Custom: User-defined mathematical formulas via eval (with security considerations)
+
+Key Features:
+- Dynamic price calculation based on current token supply
+- Support for buy and sell operations with different fee structures
+- Integration with ICO manager for real-time token minting data
+- Comprehensive input validation and error handling
+- Structured logging for price calculation monitoring
+
+Price Calculation Process:
+1. Determine current total tokens minted for the ICO
+2. Apply the appropriate bonding curve formula based on curve type
+3. Calculate base price per token
+4. Apply sell fees for sell operations (if applicable)
+5. Return total SOL cost or proceeds
+
+Security Considerations:
+- Input validation to prevent invalid calculations
+- Safe evaluation of custom formulas with restricted context
+- Price bounds checking to prevent negative prices
+- Comprehensive error handling with detailed logging
+
+Performance Features:
+- Efficient mathematical calculations
+- Integration with cached ICO data
+- Minimal computational overhead per calculation
+- Structured logging for performance monitoring
+"""
 from typing import Dict
 import math # Needed for exponential/sigmoid if implemented
 

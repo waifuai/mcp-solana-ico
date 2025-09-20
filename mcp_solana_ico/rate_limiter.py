@@ -1,3 +1,43 @@
+"""
+API Rate Limiting System
+
+This module implements a comprehensive rate limiting system for the Solana ICO API endpoints.
+It prevents abuse and ensures fair usage by limiting the number of requests per IP address
+within a specified time window.
+
+Key Features:
+- IP-based rate limiting with configurable limits
+- Sliding time window implementation
+- Automatic cleanup of expired entries
+- Memory-efficient storage using OrderedDict
+- Thread-safe operations for concurrent requests
+- Integration with configuration system for dynamic limits
+
+Rate Limiting Algorithm:
+- Uses a sliding window approach with 60-second windows
+- Tracks request count and first request timestamp per IP
+- Automatically resets counters when window expires
+- Provides immediate feedback on rate limit violations
+
+Performance Optimizations:
+- Efficient cleanup of old entries to prevent memory leaks
+- OrderedDict for automatic LRU (Least Recently Used) ordering
+- Minimal memory footprint per tracked IP address
+- Fast lookup and update operations
+- Configurable cache size limits to prevent unbounded growth
+
+Security Features:
+- Helps prevent brute force attacks
+- Protects against API abuse and spam
+- Configurable limits via environment variables
+- Detailed logging for monitoring and debugging
+
+Usage:
+- Automatically integrated into main API endpoints
+- Raises RateLimitExceededError when limits are exceeded
+- Provides structured logging for rate limit events
+- Configurable per-minute request limits via environment variables
+"""
 import time
 from typing import Dict, Tuple
 from collections import OrderedDict

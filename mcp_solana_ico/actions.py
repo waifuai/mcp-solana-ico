@@ -1,3 +1,33 @@
+"""
+Solana Actions API for ICO Integration
+
+This module provides a Flask-based HTTP API that implements Solana Actions (Blinks) for seamless
+token purchase integration with Solana wallets and applications. It enables users to buy tokens
+directly from supported Solana wallets without leaving the wallet interface.
+
+Key Features:
+- Solana Actions (Blinks) compliant API endpoints
+- Token transfer transaction generation
+- CORS support for cross-origin requests
+- Input validation and error handling
+- Integration with ICO manager and pricing modules
+
+API Endpoints:
+- GET /buy_tokens_action: Returns action metadata for wallet integration
+- POST /buy_tokens_action: Creates and returns token transfer transactions
+- OPTIONS /buy_tokens_action: Handles CORS preflight requests
+
+Security Features:
+- Public key validation for user accounts
+- Input sanitization and bounds checking
+- Transaction size validation
+- CORS origin validation (configurable)
+
+Usage:
+- Can be run as standalone Flask server for testing
+- Integrated with main MCP server for production use
+- Configurable via environment variables (CORS origins, port, etc.)
+"""
 import asyncio # Added for async client usage
 import httpx
 import os

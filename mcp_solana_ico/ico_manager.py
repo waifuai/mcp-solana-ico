@@ -1,3 +1,36 @@
+"""
+ICO Configuration and State Management
+
+This module provides comprehensive management of ICO (Initial Coin Offering) configurations and state.
+It handles loading ICO configurations from JSON files, caching for performance, and managing
+runtime state such as token minting counters.
+
+Key Features:
+- File-based ICO configuration loading with caching
+- Automatic configuration validation using Pydantic models
+- In-memory state management for token minting counters
+- File modification detection for cache invalidation
+- CRUD operations for ICO configurations
+- Integration with schema validation and error handling
+
+Configuration Loading:
+- Loads ICO configurations from JSON files in the configured directory
+- Validates configurations against the IcoConfigModel schema
+- Provides caching with automatic refresh on file changes
+- Handles missing or malformed configuration files gracefully
+
+State Management:
+- Tracks total tokens minted per ICO for bonding curve calculations
+- Provides atomic operations for incrementing token counters
+- Thread-safe operations for concurrent access
+- Persistent state management through configuration updates
+
+Performance Optimizations:
+- File modification time-based caching
+- Efficient cache cleanup and memory management
+- Bulk configuration loading with validation
+- Structured logging for monitoring and debugging
+"""
 import json
 import os
 import time

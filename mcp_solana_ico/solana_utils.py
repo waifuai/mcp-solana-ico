@@ -1,3 +1,51 @@
+"""
+Solana Blockchain Integration Utilities
+
+This module provides comprehensive utilities for interacting with the Solana blockchain,
+including transaction validation, token transfers, and account management. It serves as the
+bridge between the ICO system and the Solana network, handling all blockchain operations.
+
+Key Features:
+- Payment transaction validation with comprehensive security checks
+- Token transfer creation and execution
+- Associated token account management
+- Transaction confirmation and status monitoring
+- Token balance retrieval and validation
+- Integration with Solana RPC endpoints
+
+Transaction Processing:
+- Validates SOL payment transactions for authenticity and amount
+- Creates and sends token transfer transactions
+- Monitors transaction confirmation status
+- Handles transaction failures and timeouts
+- Provides detailed error reporting for debugging
+
+Security Features:
+- Comprehensive transaction validation
+- Public key format verification
+- Amount and destination validation
+- Transaction signature verification
+- Input sanitization and bounds checking
+
+Performance Optimizations:
+- Async HTTP client for concurrent operations
+- Efficient transaction serialization
+- Configurable timeouts and retry logic
+- Structured error handling
+- Connection pooling for HTTP requests
+
+Integration Points:
+- Uses ICO manager for configuration data
+- Integrates with pricing module for amount calculations
+- Works with configuration system for RPC endpoints
+- Provides logging for monitoring and debugging
+
+Error Handling:
+- Custom exception types for different failure modes
+- Detailed error messages for troubleshooting
+- Graceful handling of network timeouts
+- Transaction failure recovery mechanisms
+"""
 import httpx
 from typing import Optional
 from solders.pubkey import Pubkey
