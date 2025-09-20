@@ -1,4 +1,5 @@
 import httpx
+from typing import Optional
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 from solders.hash import Hash as Blockhash
@@ -44,6 +45,12 @@ async def validate_payment_transaction(client: httpx.AsyncClient, tx_signature: 
     """
     Validates the SOL payment transaction and returns the payer's public key.
     """
+    # Input validation
+    if not isinstance(tx_signature, Signature):
+        raise ValueError("Transaction signature must be a Signature object")
+    if not isinstance(required_sol, (int, float)) or required_sol < 0:
+        raise ValueError("Required SOL must be a non-negative number")
+
     try:
         transaction_response = await client.post(
             RPC_ENDPOINT,
@@ -60,6 +67,7 @@ async def validate_payment_transaction(client: httpx.AsyncClient, tx_signature: 
                     },
                 ],
             },
+            timeout=10.0  # Add timeout
         )
         transaction_response.raise_for_status()
         transaction_data = transaction_response.json()
@@ -68,53 +76,72 @@ async def validate_payment_transaction(client: httpx.AsyncClient, tx_signature: 
             raise InvalidTransactionError(f"Error fetching transaction: {transaction_data['error']}")
 
         if not transaction_data.get("result"):
-             raise InvalidTransactionError(f"Transaction not found or failed: {tx_signature}")
+            raise InvalidTransactionError(f"Transaction not found or failed: {tx_signature}")
 
         tx = transaction_data["result"]["transaction"]
         meta = transaction_data["result"]["meta"]
 
         if meta and meta.get("err"):
-             raise InvalidTransactionError(f"Transaction {tx_signature} failed on-chain: {meta['err']}")
-
+            raise InvalidTransactionError(f"Transaction {tx_signature} failed on-chain: {meta['err']}")
 
         # **CRUCIAL VALIDATION:**
         instructions = tx["message"]["instructions"]
-        if (
-            not instructions
-            or instructions[0].get("programId") != "11111111111111111111111111111111" # System Program ID as string
-        ):
+        if not instructions:
+            raise InvalidTransactionError("Transaction contains no instructions")
+
+        if instructions[0].get("programId") != "11111111111111111111111111111111":  # System Program ID as string
             raise InvalidTransactionError("Invalid transaction. Not a system program transfer.")
 
         # Ensure it's a transfer instruction
         if instructions[0].get("parsed", {}).get("type") != "transfer":
-             raise InvalidTransactionError("Invalid transaction. Instruction is not a transfer.")
+            raise InvalidTransactionError("Invalid transaction. Instruction is not a transfer.")
 
         transfer_info = instructions[0]["parsed"]["info"]
-        transfer_amount_lamports = int(transfer_info["lamports"]) # Ensure integer
+        try:
+            transfer_amount_lamports = int(transfer_info["lamports"])
+            if transfer_amount_lamports < 0:
+                raise InvalidTransactionError("Invalid transfer amount: negative value")
+        except (ValueError, KeyError):
+            raise InvalidTransactionError("Invalid transfer amount in transaction")
+
         transfer_amount_sol = transfer_amount_lamports / LAMPORTS_PER_SOL
 
         # Check destination is the ICO wallet
-        destination = Pubkey.from_string(transfer_info["destination"])
+        try:
+            destination = Pubkey.from_string(transfer_info["destination"])
+        except (ValueError, KeyError):
+            raise InvalidTransactionError("Invalid destination address in transaction")
+
         if destination != ICO_WALLET.pubkey():
-             raise InvalidTransactionError(f"Invalid transaction destination. Expected {ICO_WALLET.pubkey()}, got {destination}")
+            raise InvalidTransactionError(f"Invalid transaction destination. Expected {ICO_WALLET.pubkey()}, got {destination}")
 
         # Check sufficient payment
-        # Add a small tolerance for potential float precision issues if necessary
+        # Add a small tolerance for potential float precision issues
         if transfer_amount_sol < required_sol:
             raise InsufficientFundsError(
                 f"Insufficient payment. Required: {required_sol:.9f} SOL. Received: {transfer_amount_sol:.9f} SOL"
             )
 
-        payer = Pubkey.from_string(transfer_info["source"])
-        logger.info(f"Validated payment transaction {tx_signature} from {payer} for {transfer_amount_sol:.9f} SOL.")
+        try:
+            payer = Pubkey.from_string(transfer_info["source"])
+        except (ValueError, KeyError):
+            raise InvalidTransactionError("Invalid source address in transaction")
+
+        logger.info(f"Validated payment transaction {tx_signature} from {payer} for {transfer_amount_sol:.9f} SOL")
         return payer
 
+    except httpx.TimeoutException:
+        logger.error(f"Timeout validating transaction {tx_signature}")
+        raise InvalidTransactionError("Transaction validation timeout")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error validating transaction {tx_signature}: {e.response.status_code} - {e.response.text}")
         raise InvalidTransactionError(f"HTTP error validating transaction: {e.response.status_code}")
     except KeyError as e:
         logger.error(f"Missing expected key in transaction data for {tx_signature}: {e}")
         raise InvalidTransactionError(f"Malformed transaction data received: Missing key {e}")
+    except ValueError as e:
+        logger.error(f"Value error validating transaction {tx_signature}: {e}")
+        raise InvalidTransactionError(f"Invalid transaction data: {e}")
     except Exception as e:
         logger.exception(f"Unexpected error validating transaction {tx_signature}: {e}")
         raise InvalidTransactionError(f"Unexpected error validating transaction: {e}")
@@ -124,9 +151,21 @@ async def create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubke
     """
     Creates and sends the token transfer instruction from the ICO wallet to the payer.
     """
+    # Input validation
+    if not isinstance(payer, Pubkey):
+        raise ValueError("Payer must be a Pubkey object")
+    if not isinstance(amount, int) or amount <= 0:
+        raise ValueError("Amount must be a positive integer")
+    if amount > 10**18:  # Reasonable upper limit
+        raise ValueError("Amount is too large")
+    if not ico_id or not isinstance(ico_id, str):
+        raise ValueError("ICO ID must be a non-empty string")
+    if len(ico_id) > 100:
+        raise ValueError("ICO ID is too long")
+
     ico_config = ico_manager.get_ico(ico_id)
     if not ico_config:
-        # This should ideally be checked before calling this function
+        logger.error(f"ICO configuration not found for ico_id: {ico_id}")
         raise ValueError(f"ICO configuration not found for ico_id: {ico_id}")
 
     try:
@@ -136,8 +175,8 @@ async def create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubke
          logger.warning(f"token_address not found in config for {ico_id}, using default.")
          token_mint_address = DEFAULT_TOKEN_MINT_ADDRESS
     except ValueError as e:
-         logger.error(f"Invalid token_address format for {ico_id}: {ico_config.token.token_address}. Error: {e}")
-         raise ValueError(f"Invalid token_address for {ico_id}")
+         logger.error(f"Invalid token_address format for {ico_id}: {ico_config.token.token_address}")
+         raise ValueError(f"Invalid token_address for {ico_id}: {e}")
 
 
     payer_token_account = get_token_account(payer, token_mint_address)
@@ -256,6 +295,10 @@ async def create_and_send_token_transfer(client: httpx.AsyncClient, payer: Pubke
 
 async def get_token_balance(client: httpx.AsyncClient, account_pubkey: Pubkey) -> int:
     """Get the token balance of a specific token account."""
+    # Input validation
+    if not isinstance(account_pubkey, Pubkey):
+        raise ValueError("Account public key must be a Pubkey object")
+
     try:
         resp = await client.post(
             RPC_ENDPOINT,
@@ -265,6 +308,7 @@ async def get_token_balance(client: httpx.AsyncClient, account_pubkey: Pubkey) -
                 "method": "getTokenAccountBalance",
                 "params": [str(account_pubkey), {"commitment": "confirmed"}], # Use confirmed commitment
             },
+            timeout=10.0  # Add timeout
         )
         resp.raise_for_status()
         result = resp.json()
@@ -272,10 +316,23 @@ async def get_token_balance(client: httpx.AsyncClient, account_pubkey: Pubkey) -
         if result.get("error"):
             raise TokenBalanceError(f"Error fetching token balance for {account_pubkey}: {result['error']}")
 
-        if not result.get("result") or "value" not in result["result"] or "amount" not in result["result"]["value"]:
-             raise TokenBalanceError(f"Unexpected response format for token balance of {account_pubkey}")
+        if not result.get("result"):
+            raise TokenBalanceError(f"Token account not found: {account_pubkey}")
 
-        return int(result["result"]["value"]["amount"])
+        if "value" not in result["result"] or "amount" not in result["result"]["value"]:
+            raise TokenBalanceError(f"Unexpected response format for token balance of {account_pubkey}")
+
+        try:
+            balance = int(result["result"]["value"]["amount"])
+            if balance < 0:
+                raise TokenBalanceError(f"Invalid negative balance for {account_pubkey}")
+            return balance
+        except (ValueError, OverflowError) as e:
+            raise TokenBalanceError(f"Invalid balance amount for {account_pubkey}: {e}")
+
+    except httpx.TimeoutException:
+        logger.error(f"Timeout fetching token balance for {account_pubkey}")
+        raise TokenBalanceError("Token balance request timeout")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error fetching token balance for {account_pubkey}: {e.response.status_code} - {e.response.text}")
         raise TokenBalanceError(f"HTTP error fetching token balance: {e.response.status_code}")
