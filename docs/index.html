@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mcp-solana-ico Documentation</title>
+<style>
+
+:root {
+  --bg: #0d1117;
+  --card-bg: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent2: #7ee787;
+  --accent3: #d2a8ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+.container { max-width: 1100px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 3rem; padding: 2rem 0; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
+header p { color: var(--text-muted); font-size: 1.1rem; }
+section { margin-bottom: 2.5rem; }
+h2 { font-size: 1.4rem; margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 0.5rem; }
+.count { font-size: 0.85rem; color: var(--text-muted); font-weight: 400; }
+.section-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem; }
+.link-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.link-list a { color: var(--accent); text-decoration: none; padding: 0.4rem 0.75rem; border-radius: 6px; transition: background 0.15s; font-size: 0.95rem; }
+.link-list a:hover { background: var(--card-bg); text-decoration: underline; }
+footer { text-align: center; color: var(--text-muted); font-size: 0.8rem; padding-top: 2rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+
+</style>
+
+</head>
+<body>
+<div class="container">
+
+<header>
+<h1>mcp-solana-ico</h1>
+<p>GitHub Pages documentation</p>
+</header>
+
+<section>
+<h2>Project Description</h2>
+<h1>MCP Solana ICO Server</h1>
+<p>This project provides a simplified example of an MCP (Model Context Protocol) server for a Solana ICO (Initial Coin Offering). It demonstrates core concepts for building an MCP server that interacts with the Solana blockchain, including:</p>
+<ul>
+<li><strong>Multiple ICOs:</strong> The server can manage multiple ICOs simultaneously, each with its own configuration.</li>
+<li><strong>Bonding Curves:</strong>  Support for various bonding curve types (fixed, linear, exponential, sigmoid, and custom) to determine token pricing.</li>
+<li><strong>Sell Fee:</strong>  A configurable sell fee is applied when users sell their tokens back to the ICO.</li>
+<li><strong>Token Utility:</strong> Includes a basic <code>get_discount</code> tool as an example of token utility.</li>
+<li><strong>ICO Creation:</strong>  A new <code>ico://create</code> resource enables dynamic creation of new ICOs through a JSON configuration.</li>
+<li><strong>Affiliate Program:</strong> The affiliate program is now completely separate and resides in its own MCP server, <code>mcp_solana_affiliate</code>. This server has no dependencies on the affiliate program.</li>
+</ul>
+<p><strong>Disclaimer:</strong> This is a simplified example and is <strong>not</strong> intended for production use.  A real-world ICO would require significantly more complexity, rigorous security measures, thorough error handling, and professional auditing.  This project is for educational purposes and to demonstrate the basic structure of an MCP server interacting with Solana.</p>
+<h2>Requirements</h2>
+<ul>
+<li>Python 3.11+</li>
+<li>Poetry</li>
+<li>Solana CLI</li>
+<li>solana-test-validator</li>
+</ul>
+<h2>Installation</h2>
+<ol>
+<li>
+<p><strong>Clone the repository:</strong></p>
+<p><code>bash
+git clone &lt;repository_url&gt;
+cd &lt;repository_directory&gt;</code></p>
+</li>
+<li>
+<p><strong>Install dependencies:</strong></p>
+<p><code>bash
+poetry install</code></p>
+</li>
+<li>
+<p><strong>Set up a Solana environment:</strong></p>
+<ul>
+<li>Install the Solana CLI: <a href="https://docs.solana.com/cli/install">https://docs.solana.com/cli/install</a></li>
+<li>Start a local Solana validator: <code>solana-test-validator</code></li>
+</ul>
+</li>
+</ol>
+<h2>Configuration</h2>
+<h3><code>.env</code> file</h3>
+<p>The server uses environment variables for configuration. Create a <code>.env</code> file in the root directory with the following content:</p>
+<pre><code>RPC_ENDPOINT=&quot;http://localhost:8899&quot;  # Your Solana RPC endpoint
+TOKEN_MINT_ADDRESS=&quot;TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA&quot;  # Replace with your actual token mint address
+ICO_START_TIMESTAMP=0  # Example: Unix timestamp for ICO start
+ICO_END_TIMESTAMP=0  # Example: Unix timestamp for ICO end
+TOKEN_PRICE_PER_LAMPORTS=0.000001  # Default fixed price (if used)
+ICO_WALLET_SEED=&quot;1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1&quot; # Replace with a secure method in production!
+CURVE_TYPE=&quot;fixed&quot;  # Can be fixed, linear, exponential, sigmoid, or custom
+FIXED_PRICE=0.000001  # Only used if CURVE_TYPE is fixed
+INITIAL_PRICE=0.0000001 # Only used if CURVE_TYPE is not fixed
+SLOPE=0.000000001   # Only used if CURVE_TYPE is linear
+GROWTH_RATE=0.0000000001  # Only used if CURVE_TYPE is exponential
+CUSTOM_FORMULA=&quot;initial_price + slope * total_tokens_minted&quot;  # Only used if CURVE_TYPE is custom
+ICO_IDS=&quot;main_ico,secondary_ico&quot; # Comma-separated list of ICO IDs
+SELL_FEE_PERCENTAGE=0.02
+RATE_LIMIT_PER_MINUTE=10
+</code></pre>
+<p><strong>Important:</strong>  The <code>ICO_WALLET_SEED</code> is used here for demonstration purposes only.  <strong>Never hardcode private keys in a production environment.</strong>  Use a secure method like environment variables, a secrets manager (AWS Secrets Manager, HashiCorp Vault), or a dedicated key management system.</p>
+<h3>ICO Configurations (ico_configs/)</h3>
+<p>ICO configurations are stored as JSON files in the <code>ico_configs/</code> directory.  The server loads all <code>.json</code> files from this directory on startup.  Each file represents a single ICO.</p>
+<p><strong>Example (<code>ico_configs/main_ico.json</code>):</strong></p>
+<pre><code class="language-json">{
+  &quot;token&quot;: {
+    &quot;name&quot;: &quot;My Main Token&quot;,
+    &quot;symbol&quot;: &quot;MMT&quot;,
+    &quot;total_supply&quot;: 1000000000,
+    &quot;decimals&quot;: 9
+  },
+  &quot;ico&quot;: {
+    &quot;ico_id&quot;: &quot;main_ico&quot;,
+    &quot;start_time&quot;: 1704067200,
+    &quot;end_time&quot;: 1735689600,
+    &quot;curve_type&quot;: &quot;linear&quot;,
+    &quot;initial_price&quot;: 0.000001,
+    &quot;slope&quot;: 0.00000001,
+    &quot;sell_fee_percentage&quot;: 0.01
+  },
+  &quot;resources&quot;: []
+}
+</code></pre>
+<p><strong>Example (<code>ico_configs/secondary_ico.json</code>):</strong></p>
+<pre><code class="language-json">{
+    &quot;token&quot;:{
+      &quot;name&quot;: &quot;Secondary Token&quot;,
+      &quot;symbol&quot;: &quot;SCT&quot;,
+      &quot;total_supply&quot;: 500000,
+      &quot;decimals&quot;: 6
+   },
+   &quot;ico&quot;:{
+      &quot;ico_id&quot;:&quot;secondary_ico&quot;,
+      &quot;start_time&quot;:1706745600,
+      &quot;end_time&quot;:1738368000,
+      &quot;curve_type&quot;:&quot;fixed&quot;,
+      &quot;fixed_price&quot;:0.000005,
+      &quot;sell_fee_percentage&quot;:0.03
+   },
+   &quot;resources&quot;:[]
+}
+</code></pre>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><strong><code>token</code>:</strong><ul>
+<li><code>name</code>: The name of the token.</li>
+<li><code>symbol</code>: The token symbol.</li>
+<li><code>total_supply</code>:  The total supply of tokens (in base units).</li>
+<li><code>decimals</code>: The number of decimal places for the token.</li>
+</ul>
+</li>
+<li><strong><code>ico</code>:</strong><ul>
+<li><code>ico_id</code>:  A unique identifier for the ICO.</li>
+<li><code>start_time</code>: The start time of the ICO (Unix timestamp).</li>
+<li><code>end_time</code>: The end time of the ICO (Unix timestamp).</li>
+<li><code>curve_type</code>: The bonding curve type (<code>fixed</code>, <code>linear</code>, <code>exponential</code>, <code>sigmoid</code>, or <code>custom</code>).</li>
+<li><code>fixed_price</code>: (Optional) The fixed price of the token (in SOL per token).  Used only if <code>curve_type</code> is <code>fixed</code>.</li>
+<li><code>initial_price</code>: (Optional) The initial price for bonding curves.</li>
+<li><code>slope</code>: (Optional) The slope for linear bonding curves.</li>
+<li><code>growth_rate</code>: (Optional) The growth rate for exponential bonding curves.</li>
+<li><code>custom_formula</code>: (Optional) A custom formula for calculating the price.</li>
+<li><code>sell_fee_percentage</code>: The percentage fee applied when selling tokens back to the ICO.</li>
+</ul>
+</li>
+<li><strong><code>resources</code>:</strong> Currently unused, for future expansion.</li>
+</ul>
+<h2>Usage</h2>
+<ol>
+<li>
+<p><strong>Start the server:</strong></p>
+<p><code>bash
+poetry run python mcp_solana_ico/server.py</code></p>
+</li>
+<li>
+<p><strong>Interact with the server using an MCP client:</strong> (e.g., the Claude Desktop App or a custom client).</p>
+</li>
+</ol>
+<h2>MCP Resources and Tools</h2>
+<h3>Resources</h3>
+<ul>
+<li>
+<p><strong><code>ico://info?ico_id=&lt;ico_id&gt;</code>:</strong>  Gets information about a specific ICO.  Replace <code>&lt;ico_id&gt;</code> with the ID of the ICO.  Returns a JSON representation of the ICO configuration.</p>
+</li>
+<li>
+<p><strong><code>ico://create</code>:</strong> Creates a new ICO dynamically.  Requires a JSON payload conforming to the <code>ICOConfig</code> schema (see <code>mcp_solana_ico/schemas.py</code>). The configuration will be validated, a new <code>ICO</code> instance created and added to <code>ico_data</code>, and the config saved to <code>ico_configs/</code>.</p>
+</li>
+</ul>
+<h3>Tools</h3>
+<ul>
+<li><strong><code>buy_tokens</code>:</strong>  Buys or sells tokens from an ICO.<ul>
+<li><code>ico_id</code>: (String) The ID of the ICO.</li>
+<li><code>amount</code>: (Integer) The number of tokens to buy or sell (in base units).</li>
+<li><code>payment_transaction</code>: (String) The transaction signature of the SOL payment (for buying) or the token transfer (for selling). <em>Must be a pre-signed transaction</em>.</li>
+<li><code>client_ip</code>: (String) The client's IP address (for rate limiting).</li>
+<li><code>sell</code>: (Boolean, optional)  <code>False</code> for buying (default), <code>True</code> for selling.</li>
+</ul>
+</li>
+<li><strong><code>get_discount</code>:</strong> Gets a discount based on the number of tokens held (example utility).<ul>
+<li><code>ico_id</code>: (String) The ID of the ICO.</li>
+<li><code>amount</code>: (Integer) The amount of tokens to use for the discount calculation.</li>
+</ul>
+</li>
+</ul>
+<h2>Action API</h2>
+<p>The Action API allows the server to be integrated with Solana Blinks.  <strong>Note:</strong> The affiliate program is handled by a separate server (<code>mcp_solana_affiliate</code>), so the Action API here <em>does not</em> include any affiliate-related functionality.</p>
+<ul>
+<li>
+<p><strong><code>GET /buy_tokens_action</code></strong>: Returns metadata about the buy tokens action, such as the title, description, icon, and input fields.</p>
+</li>
+<li>
+<p><strong><code>POST /buy_tokens_action</code></strong>: This endpoint receives input data (amount) from the Blink client, constructs the appropriate Solana transaction (a token transfer from the ICO wallet to the user's token account), serializes it, and returns the serialized transaction. The Blink client then prompts the user to sign and submit this transaction.</p>
+</li>
+</ul>
+<h2>Project Structure</h2>
+<pre><code>mcp-solana-ico/           # Main project directory
+├── mcp_solana_ico/       # Core ICO server package
+│   ├── actions.py        # Action API endpoints
+│   ├── errors.py         # Custom exception classes
+│   ├── server.py         # Main ICO server code
+│   ├── schemas.py        # Pydantic models for data validation
+│   ├── utils.py          # Utility functions
+│   └── __init__.py
+├── plans/                # Planning documents
+├── tests/                # Tests
+├── .env                  # Environment variables for ICO server
+├── .gitignore
+├── LICENSE
+├── pyproject.toml        # Poetry configuration for main project
+├── pytest.ini            # Pytest configuration
+└── README.md             # This file
+</code></pre>
+<h2>Key Improvements and Explanations</h2>
+<ul>
+<li><strong>Completely Separated Affiliate Program:</strong> The affiliate program is now fully contained within its own separate MCP server (<code>mcp_solana_affiliate</code>).</li>
+<li><strong>No Affiliate Logic in Main Server:</strong> The <code>mcp_solana_ico</code> server has <em>no</em> code or configuration related to the affiliate program.</li>
+<li><strong>Action API Focus:</strong> The Action API (<code>actions.py</code>) is solely responsible for constructing and returning Solana transactions for token purchases.</li>
+</ul>
+<h2>Future Considerations</h2>
+<ul>
+<li><strong>Advanced Token Utility:</strong> Develop more complex token utility features.</li>
+<li><strong>User Accounts:</strong> Implement a user account system.</li>
+<li><strong>UI:</strong>  Create a user interface for easier interaction with the server.</li>
+<li><strong>Security Audit:</strong>  Get a professional security audit before deploying to a production environment.</li>
+<li><strong>Production-Ready Key Management:</strong>  Implement a secure key management solution.</li>
+</ul>
+</section>
+
+
+<section>
+<h2>Source Code</h2>
+<p class="section-desc">View the repository on GitHub.</p>
+<div class="link-list">
+<a href="https://github.com/waifuai/mcp-solana-ico">GitHub Repository</a>
+</div>
+</section>
+
+
+<footer>
+<p>Generated GitHub Pages for AI agent crawlability.</p>
+</footer>
+
+</div>
+</body>
+</html>
