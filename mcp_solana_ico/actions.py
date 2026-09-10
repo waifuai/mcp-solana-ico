@@ -50,7 +50,7 @@ from mcp_solana_ico import config # Import config module
 from mcp_solana_ico.schemas import IcoConfigModel # Import schema if needed for type hints
 
 # Assuming logger might be useful here too
-from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.mcpserver.utilities.logging import get_logger
 logger = get_logger(__name__)
 
 

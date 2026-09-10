@@ -43,7 +43,7 @@ import math # Needed for exponential/sigmoid if implemented
 
 from mcp_solana_ico.schemas import IcoConfigModel, CurveType
 from mcp_solana_ico import ico_manager # To access total_tokens_minted
-from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.mcpserver.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 

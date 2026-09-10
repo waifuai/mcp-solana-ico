@@ -43,7 +43,7 @@ from typing import Dict, Tuple
 from collections import OrderedDict
 
 from mcp_solana_ico.config import RATE_LIMIT_PER_MINUTE
-from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.mcpserver.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -72,7 +72,7 @@ from mcp_solana_ico.config import (
     ICO_WALLET,
     DEFAULT_TOKEN_MINT_ADDRESS, # Use default mint from config
 )
-from mcp.server.fastmcp.utilities.logging import get_logger # Assuming logger is needed
+from mcp.server.mcpserver.utilities.logging import get_logger # Assuming logger is needed
 
 logger = get_logger(__name__) # Initialize logger if needed
 

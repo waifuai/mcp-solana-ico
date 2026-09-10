@@ -50,8 +50,8 @@ from pydantic import Field, ValidationError
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.utilities.logging import get_logger
 
 # Import refactored modules
 from mcp_solana_ico import config
@@ -73,7 +73,7 @@ from mcp_solana_ico.errors import (
 logger = get_logger(__name__)
 
 # --- Server Setup ---
-mcp = FastMCP(name="Solana ICO Server")
+mcp = MCPServer(name="Solana ICO Server")
 
 # ICO data is now managed by ico_manager and loaded on import.
 # No need for ico_data global here or loading from env vars directly.

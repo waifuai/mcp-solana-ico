@@ -41,7 +41,7 @@ from pydantic import ValidationError
 
 from mcp_solana_ico.schemas import IcoConfigModel, CurveType
 from mcp_solana_ico.config import ICO_CONFIG_DIR, DEFAULT_TOKEN_MINT_ADDRESS
-from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.server.mcpserver.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 
